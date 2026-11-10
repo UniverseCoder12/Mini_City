@@ -1,0 +1,128 @@
+@startuml
+skinparam classAttributeIconSize 0
+hide circle
+
+class City {
+  +version: int
+  +name: str
+  +seed: int
+  +width: int
+  +height: int
+  +money: int
+  +day: int
+  +tax_rate: int
+  +negative_months: int
+  +game_over: bool
+  +peak_population: int
+  +next_building_id: int
+  +next_event_id: int
+  +tiles: list[Tile]
+  +buildings: list[Building]
+  +stats: CityStats
+  +events: list[GameEvent]
+  +tile_at(x, y): Tile
+  +building_at(x, y): Building
+  +get_building(id): Building
+}
+
+class Tile {
+  +x: int
+  +y: int
+  +terrain: str
+  +road: bool
+  +zone: str
+  +building_id: int
+  +near_road: bool
+}
+
+class BuildingType {
+  +id: str
+  +name: str
+  +category: str
+  +icon: str
+  +width: int
+  +height: int
+  +build_cost: int
+  +upkeep: int
+  +capacity: int
+  +power_consumption: int
+  +power_production: int
+  +service_type: str
+  +effect_radius: int
+  +happiness_effect: int
+  +unlock_population: int
+}
+
+class Building {
+  +id: int
+  +type_id: str
+  +x: int
+  +y: int
+  +level: int
+  +occupants: int
+  +built_day: int
+  +powered: bool
+  +connected: bool
+  +happiness: int
+  +days_happy: int
+  +days_unhappy: int
+  +on_fire: bool
+  +abandoned: bool
+}
+
+class CityStats {
+  +population: int
+  +working_age: int
+  +residential_capacity: int
+  +jobs_commercial: int
+  +jobs_industrial: int
+  +jobs: int
+  +workers: int
+  +unemployment: float
+  +demand_residential: int
+  +demand_commercial: int
+  +demand_industrial: int
+  +happiness: int
+  +power_produced: int
+  +power_consumed: int
+  +blackout: bool
+  +road_tiles: int
+  +income: int
+  +expenses: int
+  +balance: int
+}
+
+class GameEvent {
+  +id: int
+  +type: str
+  +day: int
+  +duration: int
+  +active: bool
+  +building_id: int
+  +message: str
+}
+
+class UiState <<st.session_state>> {
+  +city: City
+  +rng: Random
+  +speed: str
+  +tool: str
+  +build_type_id: str
+  +pending: tuple
+  +selected_tile: tuple
+  +last_click_unix: float
+  +last_tick_time: float
+  +messages: list[str]
+}
+
+City "1" *-- "1..*" Tile : contém
+City "1" *-- "0..*" Building : contém
+City "1" *-- "1" CityStats : calcula
+City "1" *-- "0..*" GameEvent : registra
+
+Tile "1" -- "0..1" Building : ocupado por
+Building "0..*" -- "1" BuildingType : é do tipo (catálogo)
+GameEvent "0..*" -- "0..1" Building : afeta
+UiState "1" o-- "1" City : guarda
+
+@enduml
