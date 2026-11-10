@@ -26,15 +26,25 @@ if "db_ready" not in st.session_state:
 
 pages = {
     "Visão geral": [
-        st.Page(dashboard_page, title="🏙️ Dashboard", icon="🏙️"),
+        st.Page(dashboard_page, title="🏙️ Dashboard", icon="🏙️", url_path="dashboard"),
     ],
     "Entidades": [
-        st.Page(cities_page, title="🏘️ Cidades", icon="🏘️"),
-        st.Page(tiles_page, title="🧩 Tiles", icon="🧩"),
-        st.Page(building_types_page, title="🏗️ Tipos de prédio", icon="🏗️"),
-        st.Page(buildings_page, title="🏢 Prédios", icon="🏢"),
-        st.Page(city_stats_page, title="📊 Estatísticas", icon="📊"),
-        st.Page(game_events_page, title="🎲 Eventos", icon="🎲"),
+        st.Page(cities_page, title="🏘️ Cidades", icon="🏘️", url_path="cidades"),
+        st.Page(tiles_page, title="🧩 Tiles", icon="🧩", url_path="tiles"),
+        st.Page(
+            building_types_page,
+            title="🏗️ Tipos de prédio",
+            icon="🏗️",
+            url_path="tipos-de-predio",
+        ),
+        st.Page(buildings_page, title="🏢 Prédios", icon="🏢", url_path="predios"),
+        st.Page(
+            city_stats_page,
+            title="📊 Estatísticas",
+            icon="📊",
+            url_path="estatisticas",
+        ),
+        st.Page(game_events_page, title="🎲 Eventos", icon="🎲", url_path="eventos"),
     ],
 }
 
