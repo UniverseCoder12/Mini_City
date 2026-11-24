@@ -1,90 +1,39 @@
-# MiniCidade
+# MiniCidade Leaderboard
 
-Sistema web para gestão de uma cidade de jogo, desenvolvido com Streamlit e SQLAlchemy. O projeto usa SQLite para desenvolvimento local e permite a conexão com MySQL em produção por meio de variáveis de ambiente.
+Aplicação Streamlit somente de leitura que exibe as cidades do jogo em uma tabela de classificação. O ranking usa população atual; pico populacional, dia de jogo e nome são critérios de desempate.
 
-## Objetivo
+## Executar localmente
 
-O app oferece uma interface para administrar os principais elementos do sistema MiniCidade, incluindo cidades, tiles, tipos de construção, prédios, estatísticas e eventos. A estrutura foi organizada em uma pasta `src/`, como solicitado na instrução do projeto.
+Requer Python 3.11+ e `uv`.
 
-## Tecnologias
-
-- Python 3.11+
-- Streamlit
-- SQLAlchemy
-- PyMySQL
-- Pandas
-- uv
-
-## Requisitos
-
-1. Instale o `uv`:
-
-```bash
-pip install uv
-```
-
-2. Instale as dependências do projeto:
-
-```bash
+```powershell
 uv sync
-```
-
-3. Crie um arquivo `.env` a partir do exemplo:
-
-```bash
-cp .env.example .env
-```
-
-4. Ajuste as variáveis de conexão do MySQL quando necessário:
-
-```env
-MYSQL_HOST=localhost
-MYSQL_PORT=3306
-MYSQL_USER=mini_city
-MYSQL_PASSWORD=mini_city
-MYSQL_DATABASE=mini_city
-```
-
-Se `MYSQL_HOST` não estiver definido, a aplicação usa o banco SQLite local (`mini_city.db`).
-
-## Como executar
-
-```bash
 uv run streamlit run src/app.py
 ```
 
-A aplicação estará disponível em `http://localhost:8501`.
+Sem configurações MySQL, o app usa `mini_city.db` em SQLite e cria as tabelas necessárias. A aplicação abre em `http://localhost:8501`.
 
-## Estrutura do projeto
+Para MySQL local/remoto, crie `.streamlit/secrets.toml` com base em `.streamlit/secrets.toml.example` e preencha as credenciais privadas:
 
-```text
-Mini_City/
-├── .env.example
-├── .gitignore
-├── .streamlit/
-│   └── config.toml
-├── README.md
-├── pyproject.toml
-├── src/
-│   ├── __init__.py
-│   ├── app.py
-│   ├── database.py
-│   ├── models.py
-│   ├── seed_data.py
-│   └── pages/
-│       ├── __init__.py
-│       ├── dashboard.py
-│       ├── cities.py
-│       ├── tiles.py
-│       ├── building_types.py
-│       ├── buildings.py
-│       ├── city_stats.py
-│       └── game_events.py
-└── mini_city.db
+```toml
+[mysql]
+host = "seu-host-mysql"
+port = 3306
+username = "seu-usuario"
+password = "sua-senha"
+database = "mini_city"
 ```
 
-## Observações
+O arquivo real `secrets.toml` é ignorado pelo Git. Também são aceitas as variáveis `MYSQL_HOST`, `MYSQL_PORT`, `MYSQL_USER`, `MYSQL_PASSWORD` e `MYSQL_DATABASE` para ambientes locais. Quando `MYSQL_HOST` não estiver configurado, o app usa SQLite.
 
-- O SQLite é usado para testes locais e desenvolvimento.
-- O MySQL foi configurado para uso em produção, com variáveis de ambiente para host, porta, usuário, senha e banco.
-- O sistema pode ser publicado no Streamlit Cloud com as variáveis de ambiente configuradas no painel do deployment.
+## Publicar no Streamlit Community Cloud
+
+1. Publique o repositório sem credenciais e crie o app apontando para `src/app.py`.
+2. No painel do app, abra **Settings > Secrets** e adicione o conteúdo TOML acima com os dados do provedor MySQL.
+3. Configure no provedor de banco o acesso de rede necessário para o app hospedado e crie um usuário com permissões mínimas para as tabelas usadas pelo jogo e pelo site.
+
+O repositório não contém nem pode descobrir as credenciais de um servidor MySQL. Para conectar em produção, é necessário fornecer um host e credenciais válidas nos Secrets do deployment. A inicialização cria tabelas SQLAlchemy que ainda não existirem; não substitui migrações para alterações futuras de esquema.
+
+## Integração com o jogo
+
+O jogo deve salvar cada cidade em `cities` e as estatísticas atuais em `city_stats`. A relação é `city_stats.city_id` para `cities.id` e há no máximo uma linha de estatísticas por cidade. A tabela do site atualiza a população, felicidade e saldo ao recarregar a página. O fluxo recomendado e o exemplo de persistência estão em [instrucoes_integracao_jogo_leaderboard.txt](instrucoes_integracao_jogo_leaderboard.txt).

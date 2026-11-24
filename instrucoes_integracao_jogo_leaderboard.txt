@@ -1,0 +1,142 @@
+INTEGRACAO DO JOGO COM A LEADERBOARD MINICIDADE
+================================================
+
+VISÃO GERAL
+-----------
+O jogo e o site precisam acessar o mesmo banco MySQL de produção. O jogo
+escreve o estado atual da cidade e suas estatísticas; o Streamlit apenas lê
+esses dados e monta a classificação por população.
+
+Não coloque usuário, senha ou URL do MySQL dentro de um jogo distribuído ao
+computador/celular do jogador. Um cliente pode ser inspecionado e essas
+credenciais dariam acesso direto ao banco. Se a simulação roda no dispositivo
+do jogador, crie um backend autenticado para receber e validar os resultados;
+esse backend, e não o cliente do jogo, deve gravar no MySQL. A implementação
+atual fornece a tabela web e o esquema SQLAlchemy, não fornece uma API HTTP.
+
+1. PREPARAR O MYSQL
+-------------------
+Crie um banco de dados MySQL no provedor escolhido. Permita conexões a partir
+do ambiente do jogo (servidor) e do Streamlit Cloud, conforme as regras de
+rede do provedor. Se o provedor exigir uma lista de IPs fixos, configure uma
+solução de saída de rede compatível com ele.
+
+Use um usuário próprio para a aplicação com apenas as permissões necessárias.
+O processo de inicialização do site chama SQLAlchemy create_all; portanto,
+esse usuário precisa criar tabelas na primeira inicialização. Depois que o
+esquema estiver criado, reduza as permissões do usuário do site para leitura,
+se o provedor permitir. O processo que grava as partidas precisa de leitura e
+escrita nas tabelas de cidades e estatísticas.
+
+2. CONFIGURAR O SITE
+--------------------
+No Streamlit Community Cloud, abra Settings > Secrets e configure:
+
+[mysql]
+host = "HOST_FORNECIDO_PELO_PROVEDOR"
+port = 3306
+username = "USUARIO_DO_SITE"
+password = "SENHA_DO_SITE"
+database = "NOME_DO_BANCO"
+
+Não faça commit dos valores reais. Para desenvolvimento local, crie
+.streamlit/secrets.toml com o mesmo formato; esse arquivo está no .gitignore.
+O exemplo sem credenciais reais está em .streamlit/secrets.toml.example.
+
+Sem MYSQL_HOST ou seção [mysql], o app usa SQLite local. Esse fallback é útil
+para desenvolvimento, mas não compartilha dados com o site publicado.
+
+3. DADOS QUE O JOGO DEVE PERSISTIR
+----------------------------------
+Tabela cities (uma linha por cidade):
+- id: identificador estável no banco
+- name: nome exibido na leaderboard
+- day: dia atual da partida
+- peak_population: maior população já atingida
+- demais colunas de estado conforme src/models.py (seed, mapa, dinheiro,
+  imposto e estado de fim de jogo)
+
+Tabela city_stats (uma linha por cidade):
+- city_id: id da linha correspondente em cities; é único
+- population: população atual e critério principal de classificação
+- happiness: felicidade média exibida
+- balance: saldo do último mês, exibido como informação complementar
+- demais estatísticas calculadas pelo jogo, conforme src/models.py
+
+O site faz LEFT JOIN entre cities e city_stats. Uma cidade sem estatísticas
+aparece com população e saldo iguais a zero e felicidade igual a 50.
+
+4. FLUXO DE GRAVAÇÃO RECOMENDADO
+--------------------------------
+Depois de cada tick do jogo (ou em intervalos, por exemplo, a cada 5-10
+segundos), o processo servidor do jogo deve:
+
+1. Abrir uma transação no MySQL.
+2. Inserir a cidade se ainda não houver uma linha para a partida; caso exista,
+   atualizar a mesma linha, sem criar uma nova cidade a cada tick.
+3. Inserir ou atualizar city_stats usando city_id. A restrição UNIQUE de
+   city_stats.city_id permite usar upsert.
+4. Fazer commit somente depois que os dois registros forem gravados.
+5. Em caso de falha, fazer rollback e tentar novamente com espera crescente.
+
+Use parâmetros/ORM, nunca concatene nomes ou valores recebidos do jogo dentro
+de SQL textual. Mantenha IDs estáveis durante a partida. Ao iniciar uma nova
+partida que deva aparecer como nova entrada, crie uma nova linha em cities e
+associe a ela seu city_stats.
+
+Exemplo conceitual com SQLAlchemy, executado no SERVIDOR do jogo e usando as
+classes deste projeto (o jogo precisa compartilhar o pacote src ou duplicar
+cuidadosamente o contrato de esquema):
+
+    from sqlalchemy import select
+    from src.database import SessionLocal
+    from src.models import City, CityStats
+
+    def salvar_estado(city_id, estado, stats_atualizadas):
+        with SessionLocal.begin() as session:
+            city = session.scalar(select(City).where(City.id == city_id))
+            if city is None:
+                city = City(id=city_id, name=estado.name)
+                session.add(city)
+
+            city.name = estado.name
+            city.day = estado.day
+            city.money = estado.money
+            city.peak_population = estado.peak_population
+
+            stats = session.scalar(
+                select(CityStats).where(CityStats.city_id == city_id)
+            )
+            if stats is None:
+                stats = CityStats(city_id=city_id)
+                session.add(stats)
+
+            stats.population = stats_atualizadas.population
+            stats.happiness = stats_atualizadas.happiness
+            stats.balance = stats_atualizadas.balance
+
+Preencha também os outros campos de CityStats se o site ou outras partes do
+jogo precisarem deles. O trecho é ilustrativo: adapte nomes e tipos ao objeto
+de estado do jogo e teste a primeira inserção e as atualizações repetidas.
+
+5. CLASSIFICAÇÃO E ATUALIZAÇÃO
+------------------------------
+A ordem atual é:
+1º população atual (maior primeiro);
+2º pico populacional (maior primeiro);
+3º dia de jogo (maior primeiro);
+4º nome da cidade (ordem alfabética).
+
+O Streamlit consulta o banco quando a página é executada novamente. Para ver
+novas gravações, recarregue a página no navegador. Não há cache de resultados
+nem endpoint de escrita exposto pelo site.
+
+6. VERIFICAÇÃO
+--------------
+- Confirme que o servidor do jogo e Streamlit usam o mesmo host, porta e nome
+  de banco, sem revelar os segredos em logs ou no cliente do jogo.
+- Grave uma cidade de teste e uma linha de city_stats; confirme que aparece
+  no topo ou na posição esperada da leaderboard.
+- Atualize população e dia da mesma cidade; confirme que o ranking muda sem
+  duplicar a linha da cidade.
+- Teste falha de conexão e rollback antes de habilitar o fluxo em produção.

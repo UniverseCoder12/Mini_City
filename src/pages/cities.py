@@ -1,90 +1,64 @@
 from __future__ import annotations
 
-import random
-
 import pandas as pd
 import streamlit as st
+from sqlalchemy import func
 
 from src.database import SessionLocal
-from src.models import City, Tile
-
-
-def _create_tiles_for_city(session, city: City) -> None:
-    existing = session.query(Tile).filter_by(city_id=city.id).count()
-    if existing:
-        return
-
-    width = city.width
-    height = city.height
-    center_start = max((width - 8) // 2, 0)
-    center_end = min(center_start + 8, width)
-
-    rng = random.Random(city.seed or 1)
-    for y in range(height):
-        for x in range(width):
-            terrain = "grass"
-            if x >= center_start and x < center_end and y >= center_start and y < center_end:
-                terrain = "grass"
-            else:
-                roll = rng.random()
-                if roll < 0.12:
-                    terrain = "water"
-                elif roll < 0.30:
-                    terrain = "forest"
-
-            tile = Tile(
-                city_id=city.id,
-                x=x,
-                y=y,
-                terrain=terrain,
-                road=False,
-                zone="none",
-                building_id=None,
-                near_road=False,
-            )
-            session.add(tile)
-
-    session.commit()
+from src.models import City, CityStats
 
 
 def render() -> None:
-    st.title("🏘️ Cidades")
+    st.title("Leaderboard MiniCidade")
 
     with SessionLocal() as session:
-        cities = session.query(City).order_by(City.id.asc()).all()
+        cities = (
+            session.query(City, CityStats)
+            .outerjoin(CityStats, CityStats.city_id == City.id)
+            .order_by(
+                func.coalesce(CityStats.population, 0).desc(),
+                City.peak_population.desc(),
+                City.day.desc(),
+                City.name.asc(),
+            )
+            .all()
+        )
 
-    if cities:
-        rows = [
-            {
-                "id": city.id,
-                "nome": city.name,
-                "seed": city.seed,
-                "largura": city.width,
-                "altura": city.height,
-                "dinheiro": city.money,
-                "dia": city.day,
-                "taxa": city.tax_rate,
-                "peak_population": city.peak_population,
-            }
-            for city in cities
-        ]
-        st.subheader("Lista de cidades")
-        st.dataframe(pd.DataFrame(rows), use_container_width=True)
+    rows = [
+        {
+            "Posição": position,
+            "Cidade": city.name,
+            "População": stats.population if stats else 0,
+            "Pico populacional": city.peak_population,
+            "Dia": city.day,
+            "Felicidade": stats.happiness if stats else 50,
+            "Saldo": stats.balance if stats else 0,
+        }
+        for position, (city, stats) in enumerate(cities, start=1)
+    ]
 
-    st.subheader("Adicionar cidade")
-    with st.form("create_city_form"):
-        name = st.text_input("Nome da cidade", value="Minha Cidade")
-        seed = st.number_input("Seed", min_value=0, max_value=999999, value=0, step=1)
-        width = st.number_input("Largura", min_value=8, max_value=128, value=32, step=1)
-        height = st.number_input("Altura", min_value=8, max_value=128, value=32, step=1)
-        submitted = st.form_submit_button("Criar cidade")
-
-    if submitted:
-        with SessionLocal() as session:
-            city = City(name=name, seed=int(seed), width=int(width), height=int(height))
-            session.add(city)
-            session.commit()
-            session.refresh(city)
-            _create_tiles_for_city(session, city)
-        st.success(f"Cidade '{name}' criada com sucesso.")
-        st.rerun()
+    leaderboard = pd.DataFrame(
+        rows,
+        columns=[
+            "Posição",
+            "Cidade",
+            "População",
+            "Pico populacional",
+            "Dia",
+            "Felicidade",
+            "Saldo",
+        ],
+    )
+    st.dataframe(
+        leaderboard,
+        use_container_width=True,
+        hide_index=True,
+        column_config={
+            "Posição": st.column_config.NumberColumn("#", format="%d"),
+            "População": st.column_config.NumberColumn(format="%d"),
+            "Pico populacional": st.column_config.NumberColumn(format="%d"),
+            "Dia": st.column_config.NumberColumn(format="%d"),
+            "Felicidade": st.column_config.NumberColumn(format="%d/100"),
+            "Saldo": st.column_config.NumberColumn(format="%d"),
+        },
+    )
